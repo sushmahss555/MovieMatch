@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import urllib.parse
 from google import genai
+import json
 
 # 1. Page Configuration for an Elite Theater Feel
 st.set_page_config(
@@ -59,26 +60,6 @@ def get_movie_poster(title, year):
         pass
     return "https://via.placeholder.com/500x750.png?text=Poster+Not+Found"
 
-# 6. EXPLICIT GOOGLE NATIVE JSON SCHEMA MATRIX (Bypasses Pydantic compatibility quirks)
-native_movie_schema = {
-    "type": "OBJECT",
-    "properties": {
-        "movies": {
-            "type": "ARRAY",
-            "items": {
-                "type": "OBJECT",
-                "properties": {
-                    "title": {"type": "STRING"},
-                    "year": {"type": "INTEGER"},
-                    "rating": {"type": "INTEGER"},
-                    "why_it_fits": {"type": "STRING"}
-                },
-                "required": ["title", "year", "rating", "why_it_fits"]
-            }
-        }
-    },
-    "required": ["movies"]
-}
 
 # ==========================================
 # WINDOW VIEW 1: THE ENTER GATEWAY
@@ -125,19 +106,33 @@ elif st.session_state.page == "results_page":
     st.markdown(f"<p style='color:#00F0FF; font-size:1rem; font-weight:600; text-transform:uppercase; margin-bottom:40px; letter-spacing:1px;'>🎯 CURATED VIBE: \"{st.session_state.saved_mood}\"</p>", unsafe_allow_html=True)
 
     with st.spinner("⚡ Calibrating screening array... parsing digital artwork files..."):
-        prompt = f'Recommend exactly 3 movies for someone feeling: "{st.session_state.saved_mood}". Provide a comprehensive, high-quality analytical evaluation.'
+        # Inject structural layout instructions directly into the text instructions
+        prompt = f"""
+        Recommend exactly 3 movies for someone feeling: "{st.session_state.saved_mood}".
+        Provide a comprehensive, high-quality analytical evaluation.
+        
+        You MUST respond with a valid JSON object matching this exact structure:
+        {{
+            "movies": [
+                {{
+                    "title": "Movie Title",
+                    "year": 2024,
+                    "rating": 9,
+                    "why_it_fits": "Detailed description of why this movie fits their mood."
+                }}
+            ]
+        }}
+        """
         
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
             config=dict(
-                response_mime_type="application/json",
-                response_schema=native_movie_schema,
+                response_mime_type="application/json"
             ),
         )
         
-        # Safely extract JSON content directly
-        import json
+        # Safely extract and parse raw text
         movie_data = json.loads(response.text)
 
         # Open 3 equal visual layout zones
