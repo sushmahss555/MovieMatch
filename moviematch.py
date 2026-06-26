@@ -131,7 +131,7 @@ def get_movie_poster(title, year):
         if response.get('results'):
             poster_path = response['results'][0].get('poster_path')
             if poster_path:
-                return f"https://image.tmorg/t/p/w500{poster_path}"
+                return f"https://image.tmdb.org/t/p/w500{poster_path}"
     except Exception:
         pass
     return "https://via.placeholder.com/500x750.png?text=Poster+Not+Found"
@@ -140,7 +140,7 @@ def get_movie_poster(title, year):
 class MovieRecommendation(BaseModel):
     title: str
     year: int
-    rating: float
+    rating: int  # Changed to int for cleaner cross-version data consistency
     why_it_fits: str
 
 class MovieList(BaseModel):
@@ -168,7 +168,6 @@ if st.session_state.page == "input_page":
         </div>
         """, unsafe_allow_html=True)
 
-        # UPGRADE: Input wrapped inside a form to capture keyboard "Enter/Go" actions seamlessly
         with st.form("mood_entry_form", clear_on_submit=False):
             user_mood = st.text_input(
                 "What kind of movie experience are you looking for?", 
@@ -202,15 +201,20 @@ elif st.session_state.page == "results_page":
     with st.spinner("⚡ Calibrating screening array... parsing digital artwork files..."):
         prompt = f'Recommend exactly 3 movies for someone feeling: "{st.session_state.saved_mood}". Provide a comprehensive, high-quality analytical evaluation.'
         
+        # FIX: Generate an explicit JSON schema structure to bypass runtime mismatches
+        stable_schema = MovieList.model_json_schema()
+
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=prompt,
             config=dict(
                 response_mime_type="application/json",
-                response_schema=MovieList,
+                response_schema=stable_schema,
             ),
         )
-        movie_data = response.parsed
+        
+        # Safely convert response text back to the Pydantic object
+        movie_data = MovieList.model_validate_json(response.text)
 
         # Open 3 equal visual layout zones
         col1, col2, col3 = st.columns(3, gap="large")
